@@ -1,5 +1,7 @@
 #!/bin/env python
 
+# $Id$
+
 import os, sys, socket, time, re
 
 def die(information) :
