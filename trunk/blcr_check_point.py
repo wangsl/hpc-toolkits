@@ -1,5 +1,7 @@
 #!/bin/env python
 
+# $Id$
+
 import os, sys, socket, time
 from sys import argv, exit
 from os import system, getenv, chmod, rename, getcwd
