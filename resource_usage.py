@@ -5,20 +5,61 @@
 # ps -o pid,ppid,ruser,pcpu,rss,vsz,cmd --user sw77
 # ps -o pid,ppid,ruser,pcpu,rss,vsz,cmd --ppid 4530
 
-import subprocess
+import subprocess, os, sys
+from subprocess import Popen as popen
+from os import getenv, getpid, environ
+from time import sleep
+from sys import argv, exit
+from socket import gethostname
+from string import atoi
+from datetime import datetime
+
+def die(information) :
+    print information
+    sys.exit(1)
+    return
+
+def usage() :
+    environment_variables = [
+        'TOTAL_WALLTIME_TO_MONITOR_RESOURCE_USAGE',
+        'PERIOD_TO_MONITOR_RESOURCE_USAGE',
+        'COMMAND_TO_RUN',
+        'RESOURCE_USAGE_LOG_FILE'
+        ]
+    
+    print
+    print " Usage: " + argv[0] + " -run : to run jobs"
+    print "        " + argv[0] + " -help : print this help information"
+    print
+    
+    for env in environment_variables :
+        print " export " + env + "="
+    print
+    exit()
+    
 
 def list_uniq(alist) :
-    """
+    '''
     Fastest order preserving
-    """
+    '''
     set = {}
     return [set.setdefault(e,e) for e in alist if e not in set]
 
+def current_time() :
+    return datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
+
+def proc_status(pid):
+    proc = "/proc/%d/status" % pid
+    if os.path.exists(proc) :
+        for line in open(proc).readlines() :
+            if line.startswith("State:") :
+                return line.split(":",1)[1].strip().split(' ')[0]
+    return None
 
 def _subprocess_from(ppid) :
     assert ppid
-    ps_command = subprocess.Popen("ps --no-headers -o pid --ppid %d 2>&1" % ppid,
-                                  shell=True, stdout=subprocess.PIPE)
+    ps_command = popen('ps --no-headers -o pid --ppid %d 2>&1' % ppid,
+                       shell=True, stdout=subprocess.PIPE)
     ps_output = ps_command.stdout.read()
     if ps_command.wait() : return []
 
@@ -57,8 +98,10 @@ class PSProcess :
 
     def _setup_from_ps(self) :
         assert self.pid
-        ps_command = subprocess.Popen("ps --no-headers -o pid,ppid,ruser,pcpu,rss,vsz,cmd --pid %d 2>&1" % self.pid,
-                                      shell=True, stdout=subprocess.PIPE)
+        if not proc_status(self.pid) : return
+        
+        ps_command = popen("ps --no-headers -o pid,ppid,ruser,pcpu,rss,vsz,cmd --pid %d 2>&1" % self.pid,
+                           shell=True, stdout=subprocess.PIPE)
         ps_output = ps_command.stdout.read()
         if ps_command.wait() : return False
 
@@ -87,30 +130,114 @@ class PSProcess :
 
 class ResourceUsage :
 
-    def __init__(self, command) :
-        self.command = command
+    def __init__(self) :
+        self.ppid = None
+        self.pids = []
+        self._set_variables_from_enviorment_variables()
+        self.resource_usage_log = None
+        self._run_command()
         return
 
+    def _run_command(self) :
+        process = popen(self.command_to_run, shell=True)
+        self.ppid = process.pid
+        assert self.ppid
+        return
+
+    def _get_all_processes(self) :
+        my_user_id = environ['USER']
+        self.pids = []
+        if proc_status(self.ppid) :
+            for pid in _get_all_processes_from(self.ppid) :
+                ps = PSProcess(pid)
+                if ps.ruser == my_user_id :
+                    self.pids.append(ps)
+        return
+
+    def resource_usage(self) :
+        if not self.resource_usage_log :
+            assert self.resource_usage_log_file
+            self.resource_usage_log = open(self.resource_usage_log_file, 'w')
+            assert self.resource_usage_log
+            self.resource_usage_log.write('        Time             CPU     Memory VirtualMem\n')
+            self.resource_usage_log.flush()
+
+        time_till_now = 0.0
+        while 1 :
+            self._get_all_processes()
+            if len(self.pids) == 0 : break
+
+            if time_till_now <= self.total_walltime_to_monitor_resource_usage :
+                total_cpu_usage = 0.0
+                total_rss_usage = 0.0
+                total_vsz_usage = 0.0
+                for pid in self.pids :
+                    total_cpu_usage += pid.pcpu
+                    total_rss_usage += pid.rss
+                    total_vsz_usage += pid.vsz
+                    
+                total_rss_usage /= 1024*1024
+                total_vsz_usage /= 1024*1024
+            
+                self.resource_usage_log.write('%20s %8.2f %8.2f %8.2f\n' % (current_time(), total_cpu_usage,
+                                                                      total_rss_usage, total_vsz_usage))
+                self.resource_usage_log.flush()
+            else :
+                if self.resource_usage_log :
+                    self.resource_usage_log.close()
+                
+            sleep(self.period_to_monitor_resource_usage)
+            time_till_now += self.period_to_monitor_resource_usage
+            
+        return
+
+    def _set_variables_from_enviorment_variables(self) :
+        self.total_walltime_to_monitor_resource_usage = 365*24*3600 
+        self.period_to_monitor_resource_usage = 60 # 1 min
+        self.command_to_run = None
+        self.resource_usage_log_file = None
+
+        if getenv('TOTAL_WALLTIME_TO_MONITOR_RESOURCE_USAGE') :
+            self.total_walltime_to_monitor_resource_usage = \
+                                atoi(getenv('TOTAL_WALLTIME_TO_MONITOR_RESOURCE_USAGE'))
+
+        if getenv('PERIOD_TO_MONITOR_RESOURCE_USAGE') :
+            self.period_to_monitor_resource_usage = atoi(getenv('PERIOD_TO_MONITOR_RESOURCE_USAGE'))
+
+        if getenv('COMMAND_TO_RUN') :
+            self.command_to_run = getenv('COMMAND_TO_RUN')
+        else :
+            die(' Please set enviorment variable COMMAND_TO_RUN')
+
+        if getenv('RESOURCE_USAGE_LOG_FILE') :
+            self.resource_usage_log_file = getenv('RESOURCE_USAGE_LOG_FILE')
+
+        if not self.resource_usage_log_file :
+            self.resource_usage_log_file = 'resource-'
+            if getenv('PBS_JOBID') :
+                self.resource_usage_log_file += 'pbsjob-' + getenv('PBS_JOBID').split('.')[0]
+            else :
+                self.resource_usage_log_file += 'pid-' + str(getpid())
+            self.resource_usage_log_file += '-' + gethostname().split('.')[0] + '.log'
+
+        assert self.resource_usage_log_file 
+
+        return
+    
 if __name__ == "__main__" :
 
-    print "test"
+    if sys.version_info[0] != 2 or sys.version_info[1] < 5 :
+        print("This script requires Python version newer than 2.5")
+        exit(1)
+        
+    if len(argv) == 1:
+        usage()
 
-    command = "ps --no-headers -o pid,ppid,ruser,pcpu,rss,vsz,cmd --ppid 4530 2>&1 | awk '{print $1}' | xargs"
-    
-    ps_command = subprocess.Popen(command, 
-                                  shell=True, stdout=subprocess.PIPE)
-    ps_output = ps_command.stdout.read()
-    assert not ps_command.wait()
-    
-    tmp = ps_output.split()
+    for arg in argv[1:] :
+        if arg == "-r" or arg == "-run" :
+            ResourceUsage().resource_usage()
+        elif arg == "-h" or arg == "-help" :
+            usage()
+        else :
+            usage()
 
-    for pid in tmp :
-        ps_test = PSProcess(pid)
-        print ps_test
-
-    for pid in _get_all_processes_from(13884) :
-        ps_test = PSProcess(pid)
-        print ps_test
-
-    
-    
