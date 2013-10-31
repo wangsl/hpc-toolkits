@@ -16,7 +16,7 @@ from datetime import datetime
 
 def die(information) :
     print information
-    sys.exit(1)
+    exit(1)
     return
 
 def usage() :
@@ -28,14 +28,15 @@ def usage() :
         ]
     
     print
-    print " Usage: " + argv[0] + " -run : to run jobs"
-    print "        " + argv[0] + " -help : print this help information"
+    print ' Usage: ' + argv[0] + ' -run : to run jobs'
+    print '        ' + argv[0] + ' -help : print this help information'
     print
     
     for env in environment_variables :
-        print " export " + env + "="
+        print ' export ' + env + '='
     print
     exit()
+    return
     
 
 def list_uniq(alist) :
@@ -49,11 +50,11 @@ def current_time() :
     return datetime.now().strftime('%Y-%m-%d-%H:%M:%S')
 
 def proc_status(pid):
-    proc = "/proc/%d/status" % pid
+    proc = '/proc/%d/status' % pid
     if os.path.exists(proc) :
         for line in open(proc).readlines() :
-            if line.startswith("State:") :
-                return line.split(":",1)[1].strip().split(' ')[0]
+            if line.startswith('State:') :
+                return line.split(':',1)[1].strip().split(' ')[0]
     return None
 
 def _subprocess_from(ppid) :
@@ -100,13 +101,12 @@ class PSProcess :
         assert self.pid
         if not proc_status(self.pid) : return
         
-        ps_command = popen("ps --no-headers -o pid,ppid,ruser,pcpu,rss,vsz,cmd --pid %d 2>&1" % self.pid,
+        ps_command = popen('ps --no-headers -o pid,ppid,ruser,pcpu,rss,vsz,cmd --pid %d 2>&1' % self.pid,
                            shell=True, stdout=subprocess.PIPE)
         ps_output = ps_command.stdout.read()
-        if ps_command.wait() : return False
+        if ps_command.wait() : return
 
         tmp = ps_output.split()
-        
         assert self.pid == int(tmp[0])
         self.ppid = int(tmp[1])
         self.ruser = tmp[2]
@@ -115,17 +115,17 @@ class PSProcess :
         self.vsz = float(tmp[5])
         self.cmd = ' '.join(tmp[6:])
 
-        return True
+        return
 
     def __repr__(self) :
-        s = ""
-        if self.pid: s += " pid: %d" % self.pid
-        if self.ppid: s += " ppid: %d" % self.ppid
-        if self.ruser: s += " user: " + self.ruser
-        if self.pcpu: s += " cpu: %.2f" % self.pcpu
-        if self.rss: s += " memory: %.2f" % self.rss
-        if self.vsz: s += " virtual: %.2f" % self.vsz
-        if self.cmd: s += " command: " + self.cmd 
+        s = ''
+        if self.pid: s += ' pid: %d' % self.pid
+        if self.ppid: s += ' ppid: %d' % self.ppid
+        if self.ruser: s += ' user: ' + self.ruser
+        if self.pcpu: s += ' cpu: %.2f' % self.pcpu
+        if self.rss: s += ' memory: %.2f' % self.rss
+        if self.vsz: s += ' virtual: %.2f' % self.vsz
+        if self.cmd: s += ' command: ' + self.cmd 
         return s
 
 class ResourceUsage :
@@ -224,19 +224,19 @@ class ResourceUsage :
 
         return
     
-if __name__ == "__main__" :
+if __name__ == '__main__' :
 
     if sys.version_info[0] != 2 or sys.version_info[1] < 5 :
-        print("This script requires Python version newer than 2.5")
+        print('This script requires Python version newer than 2.5')
         exit(1)
         
     if len(argv) == 1:
         usage()
 
     for arg in argv[1:] :
-        if arg == "-r" or arg == "-run" :
+        if arg == '-r' or arg == '-run' :
             ResourceUsage().resource_usage()
-        elif arg == "-h" or arg == "-help" :
+        elif arg == '-h' or arg == '-help' :
             usage()
         else :
             usage()
