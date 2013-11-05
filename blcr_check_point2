@@ -5,7 +5,7 @@
 source /etc/profile.d/env-modules.sh
 module load python/intel/2.7.2
 
-python -u ~/bin/blcr_check_point.py "$@"
+python -u blcr_check_point.py "$@"
 
 exit
 
