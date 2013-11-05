@@ -24,7 +24,8 @@ def usage() :
         'TOTAL_WALLTIME_TO_MONITOR_RESOURCE_USAGE',
         'PERIOD_TO_MONITOR_RESOURCE_USAGE',
         'COMMAND_TO_RUN',
-        'RESOURCE_USAGE_LOG_FILE'
+        'RESOURCE_USAGE_LOG_FILE',
+        'MAXIMUM_MEMORY_USAGE'
         ]
     
     print
@@ -154,6 +155,12 @@ class ResourceUsage :
                     self.pids.append(ps)
         return
 
+    def _kill_all_processes(self) :
+        if not len(self.pids) : return
+        for pid in self.pids :
+            popen('kill -9 %d' % pid.pid, shell=True)
+        return
+
     def resource_usage(self) :
         if not self.resource_usage_log :
             assert self.resource_usage_log_file
@@ -182,6 +189,11 @@ class ResourceUsage :
                 self.resource_usage_log.write('%20s %8.2f %8.2f %8.2f\n' % (current_time(), total_cpu_usage,
                                                                       total_rss_usage, total_vsz_usage))
                 self.resource_usage_log.flush()
+
+                if total_rss_usage >= self.maximum_memory_usage :
+                    self._kill_all_processes()
+                    return
+                
             else :
                 if self.resource_usage_log :
                     self.resource_usage_log.close()
@@ -196,6 +208,7 @@ class ResourceUsage :
         self.period_to_monitor_resource_usage = 60 # 1 min
         self.command_to_run = None
         self.resource_usage_log_file = None
+        self.maximum_memory_usage = 2*1024 # 2 TB
 
         if getenv('TOTAL_WALLTIME_TO_MONITOR_RESOURCE_USAGE') :
             self.total_walltime_to_monitor_resource_usage = \
@@ -211,6 +224,9 @@ class ResourceUsage :
 
         if getenv('RESOURCE_USAGE_LOG_FILE') :
             self.resource_usage_log_file = getenv('RESOURCE_USAGE_LOG_FILE')
+
+        if getenv('MAXIMUM_MEMORY_USAGE') :
+            self.maximum_memory_usage = float(getenv('MAXIMUM_MEMORY_USAGE'))
 
         if not self.resource_usage_log_file :
             self.resource_usage_log_file = 'resource-'
