@@ -232,6 +232,8 @@ class ResourceUsage :
             self.resource_usage_log_file = 'resource-'
             if getenv('PBS_JOBID') :
                 self.resource_usage_log_file += 'pbsjob-' + getenv('PBS_JOBID').split('.')[0]
+            elif getenv('JOB_ID') :
+                self.resource_usage_log_file += 'sgejob-' + getenv('JOB_ID').split('.')[0]
             else :
                 self.resource_usage_log_file += 'pid-' + str(getpid())
             self.resource_usage_log_file += '-' + gethostname().split('.')[0] + '.log'
