@@ -25,6 +25,7 @@ def usage() :
         'PERIOD_TO_MONITOR_RESOURCE_USAGE',
         'COMMAND_TO_RUN',
         'RESOURCE_USAGE_LOG_FILE',
+        'MY_SCRIPT',
         'MAXIMUM_MEMORY_USAGE'
         ]
     
@@ -134,8 +135,9 @@ class ResourceUsage :
     def __init__(self) :
         self.ppid = None
         self.pids = []
-        self._set_variables_from_enviorment_variables()
+        self.my_script = None
         self.resource_usage_log = None
+        self._set_variables_from_enviorment_variables()
         self._run_command()
         return
 
@@ -188,6 +190,15 @@ class ResourceUsage :
             
                 self.resource_usage_log.write('%20s %8.2f %8.2f %8.2f\n' % (current_time(), total_cpu_usage,
                                                                       total_rss_usage, total_vsz_usage))
+
+                if self.my_script :
+                    my_command = popen(self.my_script, shell=True, stdout=subprocess.PIPE)
+                    if not my_command.wait() :
+                        while 1 :
+                            line = my_command.stdout.readline()
+                            if not line : break
+                            self.resource_usage_log.write(' #MY: '  + line)
+                
                 self.resource_usage_log.flush()
 
                 if total_rss_usage >= self.maximum_memory_usage :
@@ -227,6 +238,9 @@ class ResourceUsage :
 
         if getenv('MAXIMUM_MEMORY_USAGE') :
             self.maximum_memory_usage = float(getenv('MAXIMUM_MEMORY_USAGE'))
+
+        if getenv('MY_SCRIPT') :
+            self.my_script = getenv('MY_SCRIPT')
 
         if not self.resource_usage_log_file :
             self.resource_usage_log_file = 'resource-'
